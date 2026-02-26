@@ -1,59 +1,51 @@
-import sys
-import types
-sys.modules['imghdr'] = types.ModuleType('imghdr')
 import os
 import requests
+import asyncio
 from dotenv import load_dotenv
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Environment variables load karein
+# .env file se details uthayega
 load_dotenv()
-
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_KEY = os.getenv("ABSTRACT_API_KEY")
 
-def start(update, context):
-    update.message.reply_text("👋 Bhai, number bhejo (with country code, e.g., +91...) aur main uski kundli nikaal dunga!")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔥 *NUMINFO Bot Ready!*\nNumber bhejo (+91...) details nikaalne ke liye.", parse_mode='Markdown')
 
-def get_phone_info(update, context):
-    phone_number = update.message.text
-    url = f"https://phonevalidation.abstractapi.com/v1/?api_key={API_KEY}&phone={phone_number}"
+async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    number = update.message.text
+    sent_msg = await update.message.reply_text("⏳ *Searching...*", parse_mode='Markdown')
+
+    url = f"https://phonevalidation.abstractapi.com/v1/?api_key={API_KEY}&phone={number}"
     
-    update.message.reply_text("🔍 Checking... Thoda sabar karo.")
-
     try:
         response = requests.get(url)
         data = response.json()
 
         if data.get("valid") is False:
-            update.message.reply_text("❌ Ye number sahi nahi lag raha. Check karke firse bhejo.")
+            await sent_msg.edit_text("❌ Galat number hai bhai, sahi format mein dalo.")
             return
 
-        # Formatting Output for Telegram
-        msg = (
-            f"📞 *Phone Info Found:*\n\n"
+        result = (
+            f"📞 *PHONE DETAILS FOUND*\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
             f"📍 *Location:* {data.get('location', 'N/A')}\n"
             f"🏢 *Carrier:* {data.get('carrier', 'N/A')}\n"
             f"🌍 *Country:* {data.get('country', {}).get('name', 'N/A')}\n"
-            f"📱 *Line Type:* {data.get('type', 'N/A')}\n"
-            f"✅ *Valid:* {data.get('valid')}"
+            f"📱 *Type:* {data.get('type', 'N/A')}\n"
+            f"✅ *Valid:* {data.get('valid')}\n"
+            f"━━━━━━━━━━━━━━━━━━━"
         )
-        update.message.reply_markdown(msg)
+        await sent_msg.edit_text(result, parse_mode='Markdown')
 
     except Exception as e:
-        update.message.reply_text(f"⚠️ Error aa gaya bhai: {str(e)}")
+        await sent_msg.edit_text(f"⚠️ Error: {str(e)}")
 
-def main():
-    # Aapka version 12.8 hai, isliye use_context=True zaroori hai
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
-
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, get_phone_info))
-
-    print("🚀 Bot start ho gaya hai...")
-    updater.start_polling()
-    updater.idle()
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_number))
+    
+    print("🚀 Termux Bot is Running...")
+    app.run_polling()
